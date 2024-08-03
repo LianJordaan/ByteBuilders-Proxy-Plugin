@@ -1,16 +1,15 @@
 package io.github.lianjordaan.bytebuildersproxyplugin;
 
+import com.google.gson.*;
 import com.google.inject.Inject;
 import com.velocitypowered.api.event.player.PlayerChatEvent;
 import com.velocitypowered.api.event.proxy.ProxyInitializeEvent;
 import com.velocitypowered.api.event.Subscribe;
 import com.velocitypowered.api.plugin.Plugin;
-import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.ProxyServer;
 import com.velocitypowered.api.proxy.server.*;
 import net.kyori.adventure.text.Component;
 import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.net.InetSocketAddress;
 import java.net.HttpURLConnection;
@@ -47,29 +46,17 @@ public class ByteBuildersProxyPlugin {
         String message = event.getMessage();
         if (message.startsWith("start")) {
             String[] parts = message.split(" ");
-            if (parts.length == 3) {
-                String port = parts[1];
-                String plotId = parts[2];
-                handleStartCommand(port, plotId);
-                event.setResult(PlayerChatEvent.ChatResult.denied()); // Prevent the command from being shown in chat
-            } else {
-                event.getPlayer().sendMessage(Component.text("Invalid command usage. Use start <port> <id>"));
-            }
-        }
-
-        if (message.startsWith("stop")) {
-            String[] parts = message.split(" ");
             if (parts.length == 2) {
                 String port = parts[1];
-                handleStopCommand(port);
+                handleStartCommand(port);
                 event.setResult(PlayerChatEvent.ChatResult.denied()); // Prevent the command from being shown in chat
             } else {
-                event.getPlayer().sendMessage(Component.text("Invalid command usage. Use stop <port>"));
+                event.getPlayer().sendMessage(Component.text("Invalid command usage. Use start <port>"));
             }
         }
     }
 
-    private void handleStartCommand(String port, String plotId) {
+    private void handleStartCommand(String port) {
         // Start the server by making a web request
         CompletableFuture.runAsync(() -> {
             try {
@@ -79,7 +66,7 @@ public class ByteBuildersProxyPlugin {
                 connection.setRequestMethod("POST");
                 connection.setRequestProperty("Content-Type", "application/json");
                 connection.setDoOutput(true);
-                String jsonInputString = String.format("{\"port\": \"%s\", \"plotId\": \"%s\"}", port, plotId);
+                String jsonInputString = String.format("{\"port\": \"%s\"}", port);
                 connection.getOutputStream().write(jsonInputString.getBytes(StandardCharsets.UTF_8));
 
                 // Check response
@@ -87,9 +74,7 @@ public class ByteBuildersProxyPlugin {
                     String response = scanner.useDelimiter("\\A").next();
                     logger.info("Server start response: {}", response);
                     if (response.contains("\"success\":true")) {
-                        // Request list of plots
-                        server.registerServer(new ServerInfo("dyn-" + port, new InetSocketAddress("localhost", parseInt(port))));
-                        handleListPlots(port);
+                        // will do things later
                     } else {
                         logger.error("Failed to start the server.");
                     }
