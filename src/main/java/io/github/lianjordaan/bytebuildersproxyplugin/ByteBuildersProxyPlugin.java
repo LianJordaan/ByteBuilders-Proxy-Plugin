@@ -15,10 +15,12 @@ import java.net.InetSocketAddress;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
+import java.util.Map;
+import java.util.Objects;
 import java.util.Scanner;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
-
-import static java.lang.Integer.parseInt;
+import java.util.concurrent.Executors;
 
 @Plugin(
         id = "bytebuilders_proxy_plugin",
@@ -38,6 +40,7 @@ public class ByteBuildersProxyPlugin {
 
     @Subscribe
     public void onProxyInitialization(ProxyInitializeEvent event) {
+        startServerStatusUpdater();
         logger.info("ByteBuilders Proxy Plugin initialized!");
     }
 
@@ -85,119 +88,74 @@ public class ByteBuildersProxyPlugin {
         });
     }
 
-    private void handleStopCommand(String port) {
-        // Start the server by making a web request
-        CompletableFuture.runAsync(() -> {
-            try {
-                // Make HTTP request to start the server
-                URL url = new URL("http://localhost:3000/stop-server");
-                HttpURLConnection connection = (HttpURLConnection) url.openConnection();
-                connection.setRequestMethod("POST");
-                connection.setRequestProperty("Content-Type", "application/json");
-                connection.setDoOutput(true);
-                String jsonInputString = String.format("{\"port\": \"%s\"}", port);
-                connection.getOutputStream().write(jsonInputString.getBytes(StandardCharsets.UTF_8));
-
-                // Check response
-                try (Scanner scanner = new Scanner(connection.getInputStream())) {
-                    String response = scanner.useDelimiter("\\A").next();
-                    logger.info("Server stop response: {}", response);
-                    if (response.contains("\"success\":true")) {
-                        server.unregisterServer(new ServerInfo("dyn-" + port, new InetSocketAddress("localhost", parseInt(port))));
-                    } else {
-                        logger.error("Failed to stop the server.");
-                    }
+    private void startServerStatusUpdater() {
+        // Create and start a new thread
+        Executors.newSingleThreadExecutor().execute(() -> {
+            while (true) {
+                try {
+                    updateServerList();
+                    // Sleep for 5 seconds
+                    Thread.sleep(5000);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    logger.error("Server status updater thread interrupted", e);
                 }
-            } catch (Exception e) {
-                logger.error("Error starting the server", e);
             }
         });
     }
 
-    private void handleListPlots(String port) {
-        CompletableFuture.runAsync(() -> retryWithBackoff(() -> {
+    private void updateServerList() {
+        CompletableFuture.runAsync(() -> {
             try {
-                // Make HTTP request to list plots
-                URL url = new URL("http://localhost:3000/list-plots");
+                // Make HTTP request to list server statuses
+                URL url = new URL("http://localhost:3000/list-server-statuses");
                 HttpURLConnection connection = (HttpURLConnection) url.openConnection();
                 connection.setRequestMethod("GET");
 
                 // Check response
                 try (Scanner scanner = new Scanner(connection.getInputStream())) {
                     String response = scanner.useDelimiter("\\A").next();
-                    logger.info("List plots response: {}", response);
+//                    logger.info("List server statuses response: {}", response);
 
-                    if (response.contains("\"name\":\"/dyn-" + port + "\"") && response.contains("\"status\":true")) {
-                        // Send player to the plot
-                        sendToPlot(port, 10);
-                        return true;
-                    } else {
-                        logger.error("Plot {} not found or status is false.", port);
+                    // Parse the response JSON using Gson
+                    JsonObject jsonObject = JsonParser.parseString(response).getAsJsonObject();
+
+                    Set<String> serversInResponse = jsonObject.keySet();
+
+                    for (Map.Entry<String, JsonElement> entry : jsonObject.entrySet()) {
+                        // Get the status from the JSON object
+                        String status = entry.getValue().getAsJsonObject().get("status").getAsString();
+
+                        // Check if the status is "running"
+                        if (Objects.equals(status, "running")) {
+                            String serverId = "dyn-" + entry.getKey();
+
+                            // Check if the server is not already registered
+                            if (!this.server.getServer(serverId).isPresent()) {
+                                // Register the server with the specified address and port
+                                int port = Integer.parseInt(entry.getKey());
+                                this.server.registerServer(new ServerInfo(serverId, new InetSocketAddress("localhost", port)));
+                                this.server.sendMessage(Component.text("Server dyn-" + port + " is ready for players.."));
+                            }
+                        }
+                    }
+
+                    for (RegisteredServer registeredServer : this.server.getAllServers()) {
+                        String serverID = registeredServer.getServerInfo().getName();
+                        if (serverID.equalsIgnoreCase("lobby")) {
+                            continue;
+                        }
+
+                        if (!serversInResponse.contains(serverID.replace("dyn-", ""))) {
+                            int port = Integer.parseInt(serverID.replace("dyn-", ""));
+                            this.server.unregisterServer(new ServerInfo(serverID, new InetSocketAddress("localhost", port)));
+                            this.server.sendMessage(Component.text("Server dyn-" + port + " is no longer ready for players.."));
+                        }
                     }
                 }
             } catch (Exception e) {
-                logger.error("Error listing plots", e);
-            }
-            return false;
-        }, 3, 2000)); // Retry 3 times with 2 seconds delay
-    }
-
-    private boolean retryWithBackoff(RunnableWithReturn task, int maxRetries, int delayMillis) {
-        int retryCount = 0;
-        while (retryCount < maxRetries) {
-            try {
-                if (task.run()) {
-                    return true;
-                }
-            } catch (Exception e) {
-                // Log error if needed
-            }
-
-            retryCount++;
-            try {
-                Thread.sleep(delayMillis); // Wait before retrying
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                break;
-            }
-        }
-        return false;
-    }
-
-    private void sendToPlot(String port, int retriesLeft) {
-        server.getPlayer("LianJordaan").ifPresent(player -> {
-            RegisteredServer targetServer = server.getServer("dyn-" + port).orElse(null);
-            if (targetServer != null) {
-                player.createConnectionRequest(targetServer).connect().exceptionally(throwable -> {
-                    if (retriesLeft > 0) {
-//                        logger.error("Failed to connect player to plot. Retries left: {}", retriesLeft, throwable);
-                        retryConnection(player, targetServer, retriesLeft);
-                    } else {
-                        logger.error("Failed to connect player to plot after maximum retries.", throwable);
-                    }
-                    return null;
-                });
-            } else {
-                logger.error("Server {} not found.", port);
+                logger.error("Error updating server list", e);
             }
         });
-    }
-
-    private void retryConnection(Player player, RegisteredServer targetServer, int retriesLeft) {
-        CompletableFuture.runAsync(() -> {
-            try {
-                Thread.sleep(2000); // Wait before retrying
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt(); // Restore interrupted status
-                logger.error("Retry interrupted", e);
-            }
-            // Retry by calling sendToPlot with decremented retries
-            sendToPlot(targetServer.getServerInfo().getName().replace("dyn-", ""), retriesLeft - 1);
-        });
-    }
-
-    @FunctionalInterface
-    private interface RunnableWithReturn {
-        boolean run() throws Exception;
     }
 }
