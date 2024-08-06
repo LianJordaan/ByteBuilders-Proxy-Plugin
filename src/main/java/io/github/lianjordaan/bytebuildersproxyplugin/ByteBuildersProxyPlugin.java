@@ -9,10 +9,13 @@ import com.velocitypowered.api.plugin.Plugin;
 import com.velocitypowered.api.proxy.ProxyServer;
 import com.velocitypowered.api.proxy.server.*;
 import net.kyori.adventure.text.Component;
+import org.java_websocket.client.WebSocketClient;
+import org.java_websocket.handshake.ServerHandshake;
 import org.slf4j.Logger;
 
 import java.net.InetSocketAddress;
 import java.net.HttpURLConnection;
+import java.net.URI;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
@@ -32,6 +35,8 @@ public class ByteBuildersProxyPlugin {
     private final ProxyServer server;
     private final Logger logger;
 
+    private WebSocketClient webSocketClient;
+
     @Inject
     public ByteBuildersProxyPlugin(ProxyServer server, Logger logger) {
         this.server = server;
@@ -40,8 +45,37 @@ public class ByteBuildersProxyPlugin {
 
     @Subscribe
     public void onProxyInitialization(ProxyInitializeEvent event) {
+
         startServerStatusUpdater();
         logger.info("ByteBuilders Proxy Plugin initialized!");
+        try {
+            webSocketClient = new WebSocketClient(new URI("ws://localhost:3000")) {
+                @Override
+                public void onOpen(ServerHandshake handshakedata) {
+                    logger.info("WebSocket connection opened");
+                    send("Hello from Minecraft Velocity plugin!");
+                }
+
+                @Override
+                public void onMessage(String message) {
+                    logger.info("Received message: {}", message);
+                    // Handle incoming messages from WebSocket server
+                }
+
+                @Override
+                public void onClose(int code, String reason, boolean remote) {
+                    logger.info("WebSocket connection closed: {}", reason);
+                }
+
+                @Override
+                public void onError(Exception ex) {
+                    logger.error("WebSocket error", ex);
+                }
+            };
+            webSocketClient.connect();
+        } catch (Exception e) {
+            logger.error("Failed to initialize WebSocket client", e);
+        }
     }
 
     @Subscribe
