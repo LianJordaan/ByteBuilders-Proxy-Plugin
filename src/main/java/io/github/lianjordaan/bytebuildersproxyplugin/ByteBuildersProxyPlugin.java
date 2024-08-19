@@ -18,10 +18,7 @@ import java.net.HttpURLConnection;
 import java.net.URI;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Scanner;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executors;
 
@@ -32,15 +29,15 @@ import java.util.concurrent.Executors;
 )
 public class ByteBuildersProxyPlugin {
 
-    private final ProxyServer server;
-    private final Logger logger;
-
-    private WebSocketClient webSocketClient;
+    private PluginManager pluginManager;
+    private ProxyServer server;
+    private Logger logger;
 
     @Inject
     public ByteBuildersProxyPlugin(ProxyServer server, Logger logger) {
-        this.server = server;
-        this.logger = logger;
+        this.pluginManager = new PluginManager(server, logger);
+        this.server = pluginManager.getServer();
+        this.logger = pluginManager.getLogger();
     }
 
     @Subscribe
