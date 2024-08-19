@@ -45,30 +45,13 @@ public class ByteBuildersProxyPlugin {
 
         startServerStatusUpdater();
         logger.info("ByteBuilders Proxy Plugin initialized!");
+
         try {
-            webSocketClient = new WebSocketClient(new URI("ws://localhost:3000")) {
-                @Override
-                public void onOpen(ServerHandshake handshakedata) {
-                    logger.info("WebSocket connection opened");
-                    send("Hello from Minecraft Velocity plugin!");
-                }
-
-                @Override
-                public void onMessage(String message) {
-                    logger.info("Received message: {}", message);
-                    // Handle incoming messages from WebSocket server
-                }
-
-                @Override
-                public void onClose(int code, String reason, boolean remote) {
-                    logger.info("WebSocket connection closed: {}", reason);
-                }
-
-                @Override
-                public void onError(Exception ex) {
-                    logger.error("WebSocket error", ex);
-                }
-            };
+            Properties env = EnvLoader.loadEnv();
+            String username = env.getProperty("USERNAME");
+            Objects.requireNonNull(username, "USERNAME not set in .env file");
+            WebSocketClient webSocketClient = new WebSocketClientHandler(new URI("ws://localhost:3000?username=" + username + "&id=proxy"), pluginManager);
+            pluginManager.setWebSocketClient(webSocketClient);
             webSocketClient.connect();
         } catch (Exception e) {
             logger.error("Failed to initialize WebSocket client", e);
