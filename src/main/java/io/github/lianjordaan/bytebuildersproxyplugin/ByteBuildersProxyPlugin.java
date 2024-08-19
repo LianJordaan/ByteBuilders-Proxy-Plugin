@@ -42,8 +42,7 @@ public class ByteBuildersProxyPlugin {
 
     @Subscribe
     public void onProxyInitialization(ProxyInitializeEvent event) {
-
-        startServerStatusUpdater();
+//        startServerStatusUpdater();
         logger.info("ByteBuilders Proxy Plugin initialized!");
 
         try {
@@ -102,74 +101,74 @@ public class ByteBuildersProxyPlugin {
         });
     }
 
-    private void startServerStatusUpdater() {
-        // Create and start a new thread
-        Executors.newSingleThreadExecutor().execute(() -> {
-            while (true) {
-                try {
-                    updateServerList();
-                    // Sleep for 5 seconds
-                    Thread.sleep(5000);
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                    logger.error("Server status updater thread interrupted", e);
-                }
-            }
-        });
-    }
+//    private void startServerStatusUpdater() {
+//        // Create and start a new thread
+//        Executors.newSingleThreadExecutor().execute(() -> {
+//            while (true) {
+//                try {
+//                    updateServerList();
+//                    // Sleep for 5 seconds
+//                    Thread.sleep(5000);
+//                } catch (InterruptedException e) {
+//                    Thread.currentThread().interrupt();
+//                    logger.error("Server status updater thread interrupted", e);
+//                }
+//            }
+//        });
+//    }
 
-    private void updateServerList() {
-        CompletableFuture.runAsync(() -> {
-            try {
-                // Make HTTP request to list server statuses
-                URL url = new URL("http://localhost:3000/list-server-statuses");
-                HttpURLConnection connection = (HttpURLConnection) url.openConnection();
-                connection.setRequestMethod("GET");
-
-                // Check response
-                try (Scanner scanner = new Scanner(connection.getInputStream())) {
-                    String response = scanner.useDelimiter("\\A").next();
-//                    logger.info("List server statuses response: {}", response);
-
-                    // Parse the response JSON using Gson
-                    JsonObject jsonObject = JsonParser.parseString(response).getAsJsonObject();
-
-                    Set<String> serversInResponse = jsonObject.keySet();
-
-                    for (Map.Entry<String, JsonElement> entry : jsonObject.entrySet()) {
-                        // Get the status from the JSON object
-                        String status = entry.getValue().getAsJsonObject().get("status").getAsString();
-
-                        // Check if the status is "running"
-                        if (Objects.equals(status, "running")) {
-                            String serverId = "dyn-" + entry.getKey();
-
-                            // Check if the server is not already registered
-                            if (!this.server.getServer(serverId).isPresent()) {
-                                // Register the server with the specified address and port
-                                int port = Integer.parseInt(entry.getKey());
-                                this.server.registerServer(new ServerInfo(serverId, new InetSocketAddress("localhost", port)));
-                                this.server.sendMessage(Component.text("Server dyn-" + port + " is ready for players.."));
-                            }
-                        }
-                    }
-
-                    for (RegisteredServer registeredServer : this.server.getAllServers()) {
-                        String serverID = registeredServer.getServerInfo().getName();
-                        if (serverID.equalsIgnoreCase("lobby")) {
-                            continue;
-                        }
-
-                        if (!serversInResponse.contains(serverID.replace("dyn-", ""))) {
-                            int port = Integer.parseInt(serverID.replace("dyn-", ""));
-                            this.server.unregisterServer(new ServerInfo(serverID, new InetSocketAddress("localhost", port)));
-                            this.server.sendMessage(Component.text("Server dyn-" + port + " is no longer ready for players.."));
-                        }
-                    }
-                }
-            } catch (Exception e) {
-                logger.error("Error updating server list", e);
-            }
-        });
-    }
+//    private void updateServerList() {
+//        CompletableFuture.runAsync(() -> {
+//            try {
+//                // Make HTTP request to list server statuses
+//                URL url = new URL("http://localhost:3000/list-server-statuses");
+//                HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+//                connection.setRequestMethod("GET");
+//
+//                // Check response
+//                try (Scanner scanner = new Scanner(connection.getInputStream())) {
+//                    String response = scanner.useDelimiter("\\A").next();
+////                    logger.info("List server statuses response: {}", response);
+//
+//                    // Parse the response JSON using Gson
+//                    JsonObject jsonObject = JsonParser.parseString(response).getAsJsonObject();
+//
+//                    Set<String> serversInResponse = jsonObject.keySet();
+//
+//                    for (Map.Entry<String, JsonElement> entry : jsonObject.entrySet()) {
+//                        // Get the status from the JSON object
+//                        String status = entry.getValue().getAsJsonObject().get("status").getAsString();
+//
+//                        // Check if the status is "running"
+//                        if (Objects.equals(status, "running")) {
+//                            String serverId = "dyn-" + entry.getKey();
+//
+//                            // Check if the server is not already registered
+//                            if (!this.server.getServer(serverId).isPresent()) {
+//                                // Register the server with the specified address and port
+//                                int port = Integer.parseInt(entry.getKey());
+//                                this.server.registerServer(new ServerInfo(serverId, new InetSocketAddress("localhost", port)));
+//                                this.server.sendMessage(Component.text("Server dyn-" + port + " is ready for players.."));
+//                            }
+//                        }
+//                    }
+//
+//                    for (RegisteredServer registeredServer : this.server.getAllServers()) {
+//                        String serverID = registeredServer.getServerInfo().getName();
+//                        if (serverID.equalsIgnoreCase("lobby")) {
+//                            continue;
+//                        }
+//
+//                        if (!serversInResponse.contains(serverID.replace("dyn-", ""))) {
+//                            int port = Integer.parseInt(serverID.replace("dyn-", ""));
+//                            this.server.unregisterServer(new ServerInfo(serverID, new InetSocketAddress("localhost", port)));
+//                            this.server.sendMessage(Component.text("Server dyn-" + port + " is no longer ready for players.."));
+//                        }
+//                    }
+//                }
+//            } catch (Exception e) {
+//                logger.error("Error updating server list", e);
+//            }
+//        });
+//    }
 }
