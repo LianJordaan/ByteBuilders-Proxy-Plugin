@@ -12,18 +12,26 @@ import org.slf4j.Logger;
 
 import java.net.InetSocketAddress;
 import java.net.URI;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 public class WebSocketClientHandler extends WebSocketClient {
 
     private final PluginManager pluginManager;
     private final ProxyServer server;
     private final Logger logger;
+    private final URI serverUri;
+
+    private final ScheduledExecutorService reconnectScheduler = Executors.newSingleThreadScheduledExecutor();
+
+    private static final int RECONNECT_DELAY = 5; // Delay in seconds before trying to reconnect
 
     // Constructor accepts PluginManager and Logger
     public WebSocketClientHandler(URI serverUri, PluginManager pluginManager) {
         super(serverUri);
+        this.serverUri = serverUri;
         this.pluginManager = pluginManager;
-
         this.server = pluginManager.getServer();
         this.logger = pluginManager.getLogger();
     }
@@ -82,12 +90,30 @@ public class WebSocketClientHandler extends WebSocketClient {
 
     @Override
     public void onClose(int code, String reason, boolean remote) {
-        pluginManager.getLogger().info("WebSocket connection closed: {}", reason);
+        logger.info("WebSocket connection closed: {}", reason);
+        scheduleReconnect();
     }
 
     @Override
     public void onError(Exception ex) {
-        pluginManager.getLogger().error("WebSocket error", ex);
+        logger.error("WebSocket error", ex);
+        scheduleReconnect();
+    }
+
+    private void scheduleReconnect() {
+        logger.info("Attempting to reconnect in {} seconds...", RECONNECT_DELAY);
+        reconnectScheduler.schedule(() -> {
+            try {
+                reconnectBlocking();
+            } catch (InterruptedException e) {
+                logger.error("Reconnection attempt interrupted", e);
+                Thread.currentThread().interrupt();
+            }
+        }, RECONNECT_DELAY, TimeUnit.SECONDS);
+    }
+
+    public void shutdown() {
+        reconnectScheduler.shutdownNow();
     }
 
 }
