@@ -6,6 +6,7 @@ import com.velocitypowered.api.event.player.PlayerChatEvent;
 import com.velocitypowered.api.event.proxy.ProxyInitializeEvent;
 import com.velocitypowered.api.event.Subscribe;
 import com.velocitypowered.api.plugin.Plugin;
+import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.ProxyServer;
 import com.velocitypowered.api.proxy.server.*;
 import net.kyori.adventure.text.Component;
@@ -13,6 +14,7 @@ import org.java_websocket.client.WebSocketClient;
 import org.java_websocket.handshake.ServerHandshake;
 import org.slf4j.Logger;
 
+import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.HttpURLConnection;
 import java.net.URI;
@@ -63,8 +65,8 @@ public class ByteBuildersProxyPlugin {
         if (message.startsWith("start")) {
             String[] parts = message.split(" ");
             if (parts.length == 2) {
-                String port = parts[1];
-                handleStartCommand(port);
+                String id = parts[1];
+                handleStartCommand(id, event.getPlayer());
                 event.setResult(PlayerChatEvent.ChatResult.denied()); // Prevent the command from being shown in chat
             } else {
                 event.getPlayer().sendMessage(Component.text("Invalid command usage. Use start <port>"));
@@ -72,7 +74,7 @@ public class ByteBuildersProxyPlugin {
         }
     }
 
-    private void handleStartCommand(String port) {
+    private void handleStartCommand(String id, Player player) {
         // Start the server by making a web request
         CompletableFuture.runAsync(() -> {
             try {
@@ -82,20 +84,37 @@ public class ByteBuildersProxyPlugin {
                 connection.setRequestMethod("POST");
                 connection.setRequestProperty("Content-Type", "application/json");
                 connection.setDoOutput(true);
-                String jsonInputString = String.format("{\"port\": \"%s\"}", port);
+                String jsonInputString = String.format("{\"id\": \"%s\"}", id);
                 connection.getOutputStream().write(jsonInputString.getBytes(StandardCharsets.UTF_8));
+                int responseCode = connection.getResponseCode();
 
-                // Check response
-                try (Scanner scanner = new Scanner(connection.getInputStream())) {
+                // Read response based on the status code
+                try (Scanner scanner = new Scanner(responseCode >= 400 ? connection.getErrorStream() : connection.getInputStream())) {
                     String response = scanner.useDelimiter("\\A").next();
                     logger.info("Server start response: {}", response);
-                    if (response.contains("\"success\":true")) {
-                        // will do things later
+                    JsonObject jsonResponse = JsonParser.parseString(response).getAsJsonObject();
+
+                    if (responseCode == 200) {
+                        server.sendMessage(Component.text("Empty server found, joining..."));
+                        try {
+                            server.registerServer(new ServerInfo("dyn-" + jsonResponse.get("port").getAsInt(), new InetSocketAddress("localhost", jsonResponse.get("port").getAsInt())));
+                        } catch (Exception ignored) {
+                        }
+                        server.getPlayer(player.getUniqueId()).ifPresent(player1 -> player1.createConnectionRequest(this.server.registerServer(new ServerInfo("dyn-" + jsonResponse.get("port").getAsInt(), new InetSocketAddress("localhost", jsonResponse.get("port").getAsInt())))).connect());
+                    } else if (responseCode == 409) {
+                        server.sendMessage(Component.text("Server already registered. Joining..."));
+                        try {
+                            server.registerServer(new ServerInfo("dyn-" + jsonResponse.get("port").getAsInt(), new InetSocketAddress("localhost", jsonResponse.get("port").getAsInt())));
+                        } catch (Exception ignored) {
+                        }
+                        server.getPlayer(player.getUniqueId()).ifPresent(player1 -> player1.createConnectionRequest(this.server.registerServer(new ServerInfo("dyn-" + jsonResponse.get("port").getAsInt(), new InetSocketAddress("localhost", jsonResponse.get("port").getAsInt())))).connect());
+                    } else if (responseCode == 404) {
+                        server.sendMessage(Component.text("No empty server was found, starting a new one. Please wait..."));
                     } else {
-                        logger.error("Failed to start the server.");
+                        logger.error("Failed to start the server with response code: {}", responseCode);
                     }
                 }
-            } catch (Exception e) {
+            } catch (IOException e) {
                 logger.error("Error starting the server", e);
             }
         });
