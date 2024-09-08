@@ -110,6 +110,8 @@ public class ByteBuildersProxyPlugin {
                         server.getPlayer(player.getUniqueId()).ifPresent(player1 -> player1.createConnectionRequest(this.server.registerServer(new ServerInfo("dyn-" + jsonResponse.get("port").getAsInt(), new InetSocketAddress("localhost", jsonResponse.get("port").getAsInt())))).connect());
                     } else if (responseCode == 404) {
                         server.sendMessage(Component.text("No empty server was found, starting a new one. Please wait..."));
+                    } else if (responseCode == 202) {
+                        server.getPlayer(player.getUniqueId()).ifPresent(player1 -> player1.sendMessage(Component.text("A server is starting, please wait for it to become available, and then try again.")));
                     } else {
                         logger.error("Failed to start the server with response code: {}", responseCode);
                     }
