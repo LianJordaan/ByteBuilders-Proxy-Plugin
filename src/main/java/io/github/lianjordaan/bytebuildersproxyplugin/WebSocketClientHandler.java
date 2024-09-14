@@ -54,6 +54,11 @@ public class WebSocketClientHandler extends WebSocketClient {
             if ("forwarded-message".equals(type)) {
                 String from = jsonMessage.get("from").getAsString();
                 String forwardedMessage = jsonMessage.get("message").getAsString();
+                JsonObject jsonData = JsonParser.parseString("{}").getAsJsonObject();
+                try {
+                    jsonData = JsonParser.parseString(jsonMessage.get("json").getAsString()).getAsJsonObject();
+                } catch (Exception ignored) {
+                }
 
                 if ("running".equals(forwardedMessage)) {
                     // Construct the server key
