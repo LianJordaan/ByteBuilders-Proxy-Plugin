@@ -67,9 +67,20 @@ public class ByteBuildersProxyPlugin {
             if (parts.length == 2) {
                 String id = parts[1];
                 handleStartCommand(id, event.getPlayer());
-                event.setResult(PlayerChatEvent.ChatResult.denied()); // Prevent the command from being shown in chat
+                event.getPlayer().sendMessage(Component.text("Getting plot ready... Please wait."));
+//                event.setResult(PlayerChatEvent.ChatResult.denied()); // Prevent the command from being shown in chat
             } else {
                 event.getPlayer().sendMessage(Component.text("Invalid command usage. Use start <port>"));
+            }
+        }
+         else if (message.startsWith("create")) {
+            String[] parts = message.split(" ");
+            if (parts.length == 2) {
+                String size = parts[1];
+                handleCreateCommand(event.getPlayer(), size);
+                event.getPlayer().sendMessage(Component.text("Creating plot... Please wait."));
+            } else {
+                event.getPlayer().sendMessage(Component.text("Invalid command usage. Use create"));
             }
         }
     }
@@ -112,6 +123,44 @@ public class ByteBuildersProxyPlugin {
                         server.sendMessage(Component.text("No empty server was found, starting a new one. Please wait..."));
                     } else if (responseCode == 202) {
                         server.getPlayer(player.getUniqueId()).ifPresent(player1 -> player1.sendMessage(Component.text("A server is starting, please wait for it to become available, and then try again.")));
+                    } else if (responseCode == 410) { // New response code for plot not found
+                        server.getPlayer(player.getUniqueId()).ifPresent(player1 -> player1.sendMessage(Component.text("The plot ID does not exist.")));
+                    } else {
+                        logger.error("Failed to start the server with response code: {}", responseCode);
+                    }
+                }
+            } catch (IOException e) {
+                logger.error("Error starting the server", e);
+            }
+        });
+    }
+
+    private void handleCreateCommand(Player player, String size) {
+        // Start the server by making a web request
+        CompletableFuture.runAsync(() -> {
+            try {
+                // Make HTTP request to start the server
+                URL url = new URL("http://localhost:3000/create-plot");
+                HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+                connection.setRequestMethod("POST");
+                connection.setRequestProperty("Content-Type", "application/json");
+                connection.setDoOutput(true);
+                String jsonInputString = String.format("{\"name\": \"%s\", \"size\": \"%s\", \"ownerUuid\": \"%s\"}", "<white>" + player.getUsername() + "'s Plot", size, player.getUniqueId());
+                connection.getOutputStream().write(jsonInputString.getBytes(StandardCharsets.UTF_8));
+                int responseCode = connection.getResponseCode();
+
+                // Read response based on the status code
+                try (Scanner scanner = new Scanner(responseCode >= 400 ? connection.getErrorStream() : connection.getInputStream())) {
+                    String response = scanner.useDelimiter("\\A").next();
+                    logger.info("Server start response: {}", response);
+                    JsonObject jsonResponse = JsonParser.parseString(response).getAsJsonObject();
+
+                    if (responseCode == 201) {
+                        player.sendMessage(Component.text("Your plot has been created. ID: " + jsonResponse.get("id").getAsString()));
+                    } else if (responseCode == 400) {
+                        player.sendMessage(Component.text("Error: Invalid plot size. Please enter a valid size."));
+                    } else if (responseCode == 500) {
+                        server.sendMessage(Component.text("Server Error: Failed to create plot. Please try again later."));
                     } else {
                         logger.error("Failed to start the server with response code: {}", responseCode);
                     }
