@@ -6,6 +6,7 @@ import com.google.gson.JsonParser;
 import com.velocitypowered.api.proxy.ProxyServer;
 import com.velocitypowered.api.proxy.server.ServerInfo;
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.minimessage.MiniMessage;
 import org.java_websocket.client.WebSocketClient;
 import org.java_websocket.handshake.ServerHandshake;
 import org.slf4j.Logger;
@@ -86,6 +87,17 @@ public class WebSocketClientHandler extends WebSocketClient {
                     server.sendMessage(Component.text("Server dyn-" + from + " is no longer ready for players.."));
 
                     logger.info("Server {} status updated to {}", serverKey, forwardedMessage);
+                } else if ("sendPlayer".equals(forwardedMessage)) {
+                    JsonObject finalJsonData = jsonData;
+                    server.getAllServers().forEach(registeredServer -> {
+                        if (registeredServer.getServerInfo().getName().equals(finalJsonData.get("server").getAsString())) {
+                            server.getPlayer(finalJsonData.get("player").getAsString()).ifPresent(player -> player.createConnectionRequest(registeredServer).connect());
+                        }
+                    });
+                } else if ("msgPlayer".equals(forwardedMessage)) {
+                    JsonObject finalJsonData = jsonData;
+                    server.getPlayer(finalJsonData.get("player").getAsString()).ifPresent(player -> player.sendMessage(MiniMessage.miniMessage().deserialize(finalJsonData.get("message").getAsString())));
+
                 }
             }
         } catch (JsonParseException e) {
@@ -138,22 +150,6 @@ public class WebSocketClientHandler extends WebSocketClient {
         logger.error("WebSocket error", ex);
         incrementReconnectAttempts(); // Increment the reconnect attempts
         scheduleReconnect();
-    }
-
-    private void scheduleReconnect() {
-        logger.info("Attempting to reconnect in {} seconds...", RECONNECT_DELAY);
-        reconnectScheduler.schedule(() -> {
-            try {
-                reconnectBlocking();
-            } catch (InterruptedException e) {
-                logger.error("Reconnection attempt interrupted", e);
-                Thread.currentThread().interrupt();
-            }
-        }, RECONNECT_DELAY, TimeUnit.SECONDS);
-    }
-
-    public void shutdown() {
-        reconnectScheduler.shutdownNow();
     }
 
 }
