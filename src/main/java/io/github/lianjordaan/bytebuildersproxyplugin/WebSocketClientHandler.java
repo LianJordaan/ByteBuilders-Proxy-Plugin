@@ -93,15 +93,50 @@ public class WebSocketClientHandler extends WebSocketClient {
         }
     }
 
+    private void scheduleReconnect() {
+        // Calculate exponential backoff delay
+        long delay = Math.min(RECONNECT_DELAY * (long) Math.pow(2, getReconnectAttempts()), 300);
+
+        logger.info("Attempting to reconnect in {} seconds...", delay);
+        reconnectScheduler.schedule(() -> {
+            try {
+                reconnectBlocking();
+                resetReconnectAttempts(); // Reset attempts if reconnection is successful
+            } catch (InterruptedException e) {
+                logger.error("Reconnection attempt interrupted", e);
+                Thread.currentThread().interrupt();
+            }
+        }, delay, TimeUnit.SECONDS);
+    }
+
+    private int reconnectAttempts = 0;
+
+    // Increment reconnect attempts count
+    private void incrementReconnectAttempts() {
+        reconnectAttempts++;
+    }
+
+    // Reset reconnect attempts count
+    private void resetReconnectAttempts() {
+        reconnectAttempts = 0;
+    }
+
+    // Get the current reconnect attempts count
+    private int getReconnectAttempts() {
+        return reconnectAttempts;
+    }
+
     @Override
     public void onClose(int code, String reason, boolean remote) {
         logger.info("WebSocket connection closed: {}", reason);
+        incrementReconnectAttempts(); // Increment the reconnect attempts
         scheduleReconnect();
     }
 
     @Override
     public void onError(Exception ex) {
         logger.error("WebSocket error", ex);
+        incrementReconnectAttempts(); // Increment the reconnect attempts
         scheduleReconnect();
     }
 
