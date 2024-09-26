@@ -8,7 +8,7 @@ public class PluginManager {
 
     private final ProxyServer server;
     private final Logger logger;
-    private WebSocketClient webSocketClient;
+    private static WebSocketClient webSocketClient;
 
     public PluginManager(ProxyServer server, Logger logger) {
         this.server = server;
@@ -23,7 +23,7 @@ public class PluginManager {
         return logger;
     }
 
-    public WebSocketClient getWebSocketClient() {
+    public static WebSocketClient getWebSocketClient() {
         return webSocketClient;
     }
 
